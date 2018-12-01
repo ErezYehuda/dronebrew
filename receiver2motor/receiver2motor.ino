@@ -11,9 +11,9 @@ enum Motor { FRONT_LEFT, FRONT_RIGHT, BACK_LEFT, BACK_RIGHT};
 const int motor_ports[] = {9, 10, 11, 12};
 Servo motors [4];
 
-const int top = 2000;
-const int bott = 710; // Technically, 700 might be acceptible, but it seems to be unreliable for the ESCs to read
-const int esc_range = top - bott;
+const int esc_top = 2000;
+const int esc_bott = 710; // Technically, 700 might be acceptible, but it seems to be unreliable for the ESCs to read
+const int esc_range = esc_top - esc_bott;
 
 // Some cube-root constants that allow the multiplied power distributions to never stray outside a ratio of 75:25
 const float cubert75 = cbrt(0.75);
@@ -66,7 +66,7 @@ void setup() {
           Serial.println(values[THROTTLE]);
       }
       for (int i = 0; i < 4; i++)
-        motors[i].writeMicroseconds(map(values[THROTTLE], 0, 1023, 710, 2000));
+        motors[i].writeMicroseconds(map(values[THROTTLE], 0, 1023, esc_bott, esc_top));
     } while (values[THROTTLE] > 4);
 
     // Wait for them to bring the throttle stick up again
@@ -74,7 +74,7 @@ void setup() {
       if (radio.available())
         radio.read(&values, vals_size);
       for (int i = 0; i < 4; i++)
-        motors[i].writeMicroseconds(map(values[THROTTLE], 0, 1023, 710, 2000));
+        motors[i].writeMicroseconds(map(values[THROTTLE], 0, 1023, esc_bott, esc_top));
       if (verbose_setup)
         Serial.println(values[THROTTLE]);
     } while (values[THROTTLE] < 1020);
@@ -158,10 +158,10 @@ void loop() {
     // Min microsecs: 1032.5
 
     for (int i = 0; i < 4; i++) {
-      //      Serial.print((int)(distrs[i] * esc_range + bott));
+      //      Serial.print((int)(distrs[i] * esc_range + esc_bott));
       //      //      Serial.print((distrs[i]) );
       //      Serial.print(",");
-      motors[i].writeMicroseconds((int)(distrs[i] * esc_range + bott));
+      motors[i].writeMicroseconds((int)(distrs[i] * esc_range + esc_bott));
     }
     //    Serial.println();
     //    Serial.println((distrs[0] + distrs[1] + distrs[2] + distrs[3]));
