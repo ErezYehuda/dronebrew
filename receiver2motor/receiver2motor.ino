@@ -13,6 +13,7 @@ Servo motors [4];
 
 const int top = 2000;
 const int bott = 710; // Technically, 700 might be acceptible, but it seems to be unreliable for the ESCs to read
+const int esc_range = top - bott;
 
 // Some cube-root constants that allow the multiplied power distributions to never stray outside a ratio of 75:25
 const float cubert75 = 0.90856029641;
@@ -32,7 +33,7 @@ bool verbose_setup, verbose_loop;
 
 void setup() {
   Serial.begin(9600);
-  verbose_setup = false;
+  verbose_setup = true;
   verbose_loop = true;
 
   for (int i = 0; i < 4; i++)
@@ -44,26 +45,28 @@ void setup() {
   radio.startListening();
   Serial.println("</setup>");
 
-  //  while (!radio.available()); // Wait for radio
   for (int i = 0; i < 10; i++)
     if (radio.available())
       radio.read(&values, vals_size);
     else i -= 1;
+
   if (verbose_setup) {
     Serial.print("Initial Throttle: ");
     Serial.println(values[THROTTLE]);
   }
+
   if (values[THROTTLE] >= 1020) {
     Serial.println("Configuring ESCs");
     // If it's within 3 of the top Y-position of the left joystick...
     // Write the undistributed throttle to the motors until it gets below 4
     do {
-      if (radio.available())
+      if (radio.available()) {
         radio.read(&values, vals_size);
+        if (verbose_setup)
+          Serial.println(values[THROTTLE]);
+      }
       for (int i = 0; i < 4; i++)
         motors[i].writeMicroseconds(map(values[THROTTLE], 0, 1023, 710, 2000));
-      if (verbose_setup)
-        Serial.println(values[THROTTLE]);
     } while (values[THROTTLE] > 4);
 
     // Wait for them to bring the throttle stick up again
@@ -98,8 +101,10 @@ void loop() {
     // Elevator=Pitch->Front vs. Back
     // Rudder=Yaw->CW vs. CCW
 
+    // Since my joystick defaults to the center, I'm setting it to treat mid as the bottom
     float throttle = (values[THROTTLE] - 512) * 2  / 1023.0;
     if (throttle < 0) throttle = 0;
+    // Setting it up so that the product of aileron, elevator, and rudder for any given motor will be [0.25,0.75]
     float aileron  = (values[AILERON])  / 1023.0 ;
     aileron = aileron * inter_cubert + cubert25;
     float elevator = values[ELEVATOR] / 1023.0;
@@ -148,13 +153,13 @@ void loop() {
 
 
     for (int i = 0; i < 4; i++) {
-      //      Serial.print((int)(distrs[i] * 2 * 290 + 710));
-      Serial.print((distrs[i] * 2  ) );
+      Serial.print((int)(distrs[i] * esc_range + bott));
+      //      Serial.print((distrs[i]) );
       Serial.print(",");
-      //      motors[i].writeMicroseconds((int)(distrs[i] * 2 * 290 + 710));
+      motors[i].writeMicroseconds((int)(distrs[i] * esc_range + bott));
     }
     //    Serial.println();
-    Serial.println((distrs[0] + distrs[1] + distrs[2] + distrs[3]) * 2);
+    Serial.println((distrs[0] + distrs[1] + distrs[2] + distrs[3]));
 
     //    if (verbose_loop) {
     //      print_dists();
