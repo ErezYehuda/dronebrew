@@ -16,8 +16,8 @@ const int bott = 710; // Technically, 700 might be acceptible, but it seems to b
 const int esc_range = top - bott;
 
 // Some cube-root constants that allow the multiplied power distributions to never stray outside a ratio of 75:25
-const float cubert75 = 0.90856029641;
-const float cubert25 = 0.62996052494;
+const float cubert75 = cbrt(0.75);
+const float cubert25 = cbrt(0.25);
 const float cubert_sum = cubert75 + cubert25;
 const float inter_cubert = cubert75 - cubert25;
 
@@ -152,18 +152,23 @@ void loop() {
     distrs[BACK_RIGHT]  *= cubert_sum - rudder;
 
 
+    // Some reference values (at full throttle):
+    // Max microsecs: 1677.5
+    // Mid microsecs: 1290.5 (this is the value of esc_range)
+    // Min microsecs: 1032.5
+
     for (int i = 0; i < 4; i++) {
-      Serial.print((int)(distrs[i] * esc_range + bott));
-      //      Serial.print((distrs[i]) );
-      Serial.print(",");
+      //      Serial.print((int)(distrs[i] * esc_range + bott));
+      //      //      Serial.print((distrs[i]) );
+      //      Serial.print(",");
       motors[i].writeMicroseconds((int)(distrs[i] * esc_range + bott));
     }
     //    Serial.println();
-    Serial.println((distrs[0] + distrs[1] + distrs[2] + distrs[3]));
+    //    Serial.println((distrs[0] + distrs[1] + distrs[2] + distrs[3]));
 
-    //    if (verbose_loop) {
-    //      print_dists();
-    //    }
+    if (verbose_loop) {
+      print_mico_dists();
+    }
 
   }
 }
@@ -175,5 +180,14 @@ void print_dists() {
   }
   Serial.println();
 }
+
+void print_mico_dists() {
+  for (int i = 0; i < 4; i++) {
+    Serial.print((int)(distrs[i] * esc_range + bott));
+    Serial.print(',');
+  }
+  Serial.println();
+}
+
 
 
