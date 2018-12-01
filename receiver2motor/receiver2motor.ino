@@ -49,7 +49,7 @@ void setup() {
   }
   if (values[THROTTLE] >= 1020) {
     Serial.println("Configuring ESCs");
-    // If it's within 25 of the top Y-position of the left joystick...
+    // If it's within 3 of the top Y-position of the left joystick...
     // Write the undistributed throttle to the motors until it gets below 4
     do {
       if (radio.available())
@@ -59,6 +59,16 @@ void setup() {
       if (verbose_setup)
         Serial.println(values[THROTTLE]);
     } while (values[THROTTLE] > 4);
+
+    // Wait for them to bring the throttle stick up again
+    do {
+      if (radio.available())
+        radio.read(&values, vals_size);
+      for (int i = 0; i < 4; i++)
+        motors[i].writeMicroseconds(map(values[THROTTLE], 0, 1023, 710, 2000));
+      if (verbose_setup)
+        Serial.println(values[THROTTLE]);
+    } while (values[THROTTLE] < 1020);
   }
   Serial.println("Ending ESC configuration");
 }
@@ -67,49 +77,82 @@ void loop() {
   if (radio.available()) {
     radio.read(&values, vals_size);
 
-    if (verbose_loop) {
-      Serial.print(values[THROTTLE]);
-      Serial.print(',');
-      Serial.print(values[AILERON]);
-      Serial.print(',');
-      Serial.print(values[ELEVATOR]);
-      Serial.print(',');
-      Serial.println(values[RUDDER]);
-    }
+    //        if (verbose_loop) {
+    //          Serial.print(values[THROTTLE]);
+    //          Serial.print(',');
+    //          Serial.print(values[AILERON]);
+    //          Serial.print(',');
+    //          Serial.print(values[ELEVATOR]);
+    //          Serial.print(',');
+    //          Serial.println(values[RUDDER]);
+    //        }
+
     // Throttle->All
     // Aileron=Roll->Left vs. Right
     // Elevator=Pitch->Front vs. Back
     // Rudder=Yaw->CW vs. CCW
 
-    float throttle = values[THROTTLE] / 1023.0;
-    float aileron  = values[AILERON]  / 1023.0;
+    float throttle = (values[THROTTLE] - 512) * 2  / 1023.0;
+    float aileron  = (values[AILERON])  / 1023.0 ;
+    aileron = aileron * 0.5 + 0.25;
     float elevator = values[ELEVATOR] / 1023.0;
+    elevator = elevator * 0.5 + 0.25;
     float rudder   = values[RUDDER]   / 1023.0;
+    rudder = rudder * 0.5 + 0.25;
 
-    for (int i = 0; i < 4; i++)
+    for (int i = 0; i < 4; i++) {
       distrs[i] = throttle;
+      if (distrs[i] < 0)
+        distrs[i] = 0;
+    }
 
+    //    print_dists();
+    //
     distrs[FRONT_RIGHT] *= aileron;
     distrs[BACK_RIGHT]  *= aileron;
-    distrs[FRONT_LEFT]  *= 1 - aileron;
-    distrs[BACK_LEFT]   *= 1 - aileron;
+    distrs[FRONT_LEFT]  *= (1 - aileron );
+    distrs[BACK_LEFT]   *= (1 - aileron );
+
+    //    Serial.print(aileron);
+    //    Serial.print(":");
+    //    Serial.print(1 - aileron);
+    //    Serial.print("=>");
+    //    print_dists();
 
     distrs[BACK_LEFT]   *= elevator;
     distrs[BACK_RIGHT]  *= elevator;
-    distrs[FRONT_LEFT]  *= 1 - elevator;
-    distrs[FRONT_RIGHT] *= 1 - elevator;
+    distrs[FRONT_LEFT]  *= (1 - elevator);
+    distrs[FRONT_RIGHT] *= (1 - elevator);
+    //
+    //    print_dists();
 
     distrs[BACK_LEFT]   *= rudder;
     distrs[FRONT_RIGHT] *= rudder;
     distrs[FRONT_LEFT]  *= 1 - rudder;
     distrs[BACK_RIGHT]  *= 1 - rudder;
 
-    for (int i = 0; i < 4; i++)
-      motors[i].writeMicroseconds((int)(distrs[i] * 290 + 710));
+    for (int i = 0; i < 4; i++) {
+      Serial.print(distrs[i] * 4);
+      Serial.print(",");
+      motors[i].writeMicroseconds((int)(distrs[i] * 2 * 290 + 710));
+    }
+    Serial.println();
 
-    //    motors[FRONT_LEFT].writeMicroseconds(values[THROTTLE]);
+    //    if (verbose_loop) {
+    //      print_dists();
+    //    }
 
   }
 
 
 }
+
+void print_dists() {
+  for (int i = 0; i < 4; i++) {
+    Serial.print(distrs[i]);
+    Serial.print(',');
+  }
+  Serial.println();
+}
+
+
