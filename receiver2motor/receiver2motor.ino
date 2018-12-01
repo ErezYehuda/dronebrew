@@ -146,34 +146,21 @@ void loop() {
     distrs[FRONT_LEFT]  *= cubert_sum - rudder;
     distrs[BACK_RIGHT]  *= cubert_sum - rudder;
 
-    //    float overflow_adjust = 1 / ((distrs[0] + distrs[1] + distrs[2] + distrs[3]) * 2);
-    //    if (overflow_adjust < 1) {
-    //      Serial.print("Adjust:");
-    //      Serial.print(overflow_adjust);
-    //      Serial.print("::");
-    //    } else {
-    //      Serial.print("           ::");
-    //    }
 
     for (int i = 0; i < 4; i++) {
-      //      if (overflow_adjust < 1)
-      //        distrs[i] *= overflow_adjust;
-
-
-      Serial.print((int)(distrs[i] * 2 * 290 + 710));
+      //      Serial.print((int)(distrs[i] * 2 * 290 + 710));
+      Serial.print((distrs[i] * 2  ) );
       Serial.print(",");
-      motors[i].writeMicroseconds((int)(distrs[i] * 2 * 290 + 710));
+      //      motors[i].writeMicroseconds((int)(distrs[i] * 2 * 290 + 710));
     }
     //    Serial.println();
-    Serial.println((distrs[0] + distrs[1] + distrs[2] + distrs[3]));
+    Serial.println((distrs[0] + distrs[1] + distrs[2] + distrs[3]) * 2);
 
     //    if (verbose_loop) {
     //      print_dists();
     //    }
 
   }
-
-
 }
 
 void print_dists() {
