@@ -14,6 +14,12 @@ Servo motors [4];
 const int top = 2000;
 const int bott = 710; // Technically, 700 might be acceptible, but it seems to be unreliable for the ESCs to read
 
+// Some cube-root constants that allow the multiplied power distributions to never stray outside a ratio of 75:25
+const float cubert75 = 0.90856029641;
+const float cubert25 = 0.62996052494;
+const float cubert_sum = cubert75 + cubert25;
+const float inter_cubert = cubert75 - cubert25;
+
 int values[4];
 float distrs[4]; // Distributions of throttle
 
@@ -77,15 +83,15 @@ void loop() {
   if (radio.available()) {
     radio.read(&values, vals_size);
 
-    //        if (verbose_loop) {
-    //          Serial.print(values[THROTTLE]);
-    //          Serial.print(',');
-    //          Serial.print(values[AILERON]);
-    //          Serial.print(',');
-    //          Serial.print(values[ELEVATOR]);
-    //          Serial.print(',');
-    //          Serial.println(values[RUDDER]);
-    //        }
+    //    if (verbose_loop) {
+    //      Serial.print(values[THROTTLE]);
+    //      Serial.print(',');
+    //      Serial.print(values[AILERON]);
+    //      Serial.print(',');
+    //      Serial.print(values[ELEVATOR]);
+    //      Serial.print(',');
+    //      Serial.println(values[RUDDER]);
+    //    }
 
     // Throttle->All
     // Aileron=Roll->Left vs. Right
@@ -93,50 +99,73 @@ void loop() {
     // Rudder=Yaw->CW vs. CCW
 
     float throttle = (values[THROTTLE] - 512) * 2  / 1023.0;
+    if (throttle < 0) throttle = 0;
     float aileron  = (values[AILERON])  / 1023.0 ;
-    aileron = aileron * 0.5 + 0.25;
+    aileron = aileron * inter_cubert + cubert25;
     float elevator = values[ELEVATOR] / 1023.0;
-    elevator = elevator * 0.5 + 0.25;
+    elevator = elevator * inter_cubert + cubert25;
     float rudder   = values[RUDDER]   / 1023.0;
-    rudder = rudder * 0.5 + 0.25;
+    rudder = rudder * inter_cubert + cubert25;
 
     for (int i = 0; i < 4; i++) {
       distrs[i] = throttle;
-      if (distrs[i] < 0)
-        distrs[i] = 0;
     }
 
+    //    if (verbose_loop) {
+    //      Serial.print(throttle);
+    //      Serial.print(',');
+    //      Serial.print(aileron);
+    //      Serial.print(',');
+    //      Serial.print(elevator);
+    //      Serial.print(',');
+    //      Serial.println(rudder);
+    //    }
+
     //    print_dists();
-    //
+
     distrs[FRONT_RIGHT] *= aileron;
     distrs[BACK_RIGHT]  *= aileron;
-    distrs[FRONT_LEFT]  *= (1 - aileron );
-    distrs[BACK_LEFT]   *= (1 - aileron );
+    distrs[FRONT_LEFT]  *= (cubert_sum - aileron );
+    distrs[BACK_LEFT]   *= (cubert_sum - aileron );
 
     //    Serial.print(aileron);
     //    Serial.print(":");
-    //    Serial.print(1 - aileron);
+    //    Serial.print(cubert_sum - aileron);
     //    Serial.print("=>");
     //    print_dists();
 
     distrs[BACK_LEFT]   *= elevator;
     distrs[BACK_RIGHT]  *= elevator;
-    distrs[FRONT_LEFT]  *= (1 - elevator);
-    distrs[FRONT_RIGHT] *= (1 - elevator);
+    distrs[FRONT_LEFT]  *= (cubert_sum - elevator);
+    distrs[FRONT_RIGHT] *= (cubert_sum - elevator);
     //
     //    print_dists();
 
     distrs[BACK_LEFT]   *= rudder;
     distrs[FRONT_RIGHT] *= rudder;
-    distrs[FRONT_LEFT]  *= 1 - rudder;
-    distrs[BACK_RIGHT]  *= 1 - rudder;
+    distrs[FRONT_LEFT]  *= cubert_sum - rudder;
+    distrs[BACK_RIGHT]  *= cubert_sum - rudder;
+
+    //    float overflow_adjust = 1 / ((distrs[0] + distrs[1] + distrs[2] + distrs[3]) * 2);
+    //    if (overflow_adjust < 1) {
+    //      Serial.print("Adjust:");
+    //      Serial.print(overflow_adjust);
+    //      Serial.print("::");
+    //    } else {
+    //      Serial.print("           ::");
+    //    }
 
     for (int i = 0; i < 4; i++) {
-      Serial.print(distrs[i] * 4);
+      //      if (overflow_adjust < 1)
+      //        distrs[i] *= overflow_adjust;
+
+
+      Serial.print((int)(distrs[i] * 2 * 290 + 710));
       Serial.print(",");
       motors[i].writeMicroseconds((int)(distrs[i] * 2 * 290 + 710));
     }
-    Serial.println();
+    //    Serial.println();
+    Serial.println((distrs[0] + distrs[1] + distrs[2] + distrs[3]));
 
     //    if (verbose_loop) {
     //      print_dists();
