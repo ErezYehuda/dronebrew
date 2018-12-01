@@ -183,7 +183,7 @@ void print_dists() {
 
 void print_mico_dists() {
   for (int i = 0; i < 4; i++) {
-    Serial.print((int)(distrs[i] * esc_range + bott));
+    Serial.print((int)(distrs[i] * esc_range + esc_bott));
     Serial.print(',');
   }
   Serial.println();
