@@ -15,26 +15,27 @@ const int esc_top = 2000;
 const int esc_bott = 710; // Technically, 700 might be acceptible, but it seems to be unreliable for the ESCs to read
 const int esc_range = esc_top - esc_bott;
 
-// Some cube-root constants that allow the multiplied power distributions to never stray outside a ratio of 75:25
+// Some cube-root constants that allow the multiplied throttle distributions to never stray outside a ratio of 75:25
 const float cubert75 = cbrt(0.75);
 const float cubert25 = cbrt(0.25);
 const float cubert_sum = cubert75 + cubert25;
 const float inter_cubert = cubert75 - cubert25;
-
-int values[4];
-float distrs[4]; // Distributions of throttle
+const float cubert_coefficient = inter_cubert / 1023;
 
 const int size_example[4];
 const size_t vals_size = sizeof(size_example);
 
+int values[4];
+float distrs[4]; // Distributions of throttle
+
 RF24 radio(7, 8); // CE, CSN
 const byte address[6] = "00001";
-bool verbose_setup, verbose_loop;
+
+const bool verbose_setup = false, verbose_loop = false;
 
 void setup() {
-  Serial.begin(9600);
-  verbose_setup = true;
-  verbose_loop = true;
+  if (verbose_setup || verbose_loop)
+    Serial.begin(9600);
 
   for (int i = 0; i < 4; i++)
     motors[i].attach(motor_ports[i]);
@@ -86,15 +87,9 @@ void loop() {
   if (radio.available()) {
     radio.read(&values, vals_size);
 
-    //    if (verbose_loop) {
-    //      Serial.print(values[THROTTLE]);
-    //      Serial.print(',');
-    //      Serial.print(values[AILERON]);
-    //      Serial.print(',');
-    //      Serial.print(values[ELEVATOR]);
-    //      Serial.print(',');
-    //      Serial.println(values[RUDDER]);
-    //    }
+    if (verbose_loop) {
+      print_channels();
+    }
 
     // Throttle->All
     // Aileron=Roll->Left vs. Right
@@ -105,46 +100,23 @@ void loop() {
     float throttle = (values[THROTTLE] - 512) * 2  / 1023.0;
     if (throttle < 0) throttle = 0;
     // Setting it up so that the product of aileron, elevator, and rudder for any given motor will be [0.25,0.75]
-    float aileron  = (values[AILERON])  / 1023.0 ;
-    aileron = aileron * inter_cubert + cubert25;
-    float elevator = values[ELEVATOR] / 1023.0;
-    elevator = elevator * inter_cubert + cubert25;
-    float rudder   = values[RUDDER]   / 1023.0;
-    rudder = rudder * inter_cubert + cubert25;
+    float aileron  = values[AILERON]  / cubert_coefficient + cubert25;
+    float elevator = values[ELEVATOR] / cubert_coefficient + cubert25;
+    float rudder   = values[RUDDER]   / cubert_coefficient + cubert25;
 
     for (int i = 0; i < 4; i++) {
       distrs[i] = throttle;
     }
-
-    //    if (verbose_loop) {
-    //      Serial.print(throttle);
-    //      Serial.print(',');
-    //      Serial.print(aileron);
-    //      Serial.print(',');
-    //      Serial.print(elevator);
-    //      Serial.print(',');
-    //      Serial.println(rudder);
-    //    }
-
-    //    print_dists();
 
     distrs[FRONT_RIGHT] *= aileron;
     distrs[BACK_RIGHT]  *= aileron;
     distrs[FRONT_LEFT]  *= (cubert_sum - aileron );
     distrs[BACK_LEFT]   *= (cubert_sum - aileron );
 
-    //    Serial.print(aileron);
-    //    Serial.print(":");
-    //    Serial.print(cubert_sum - aileron);
-    //    Serial.print("=>");
-    //    print_dists();
-
     distrs[BACK_LEFT]   *= elevator;
     distrs[BACK_RIGHT]  *= elevator;
     distrs[FRONT_LEFT]  *= (cubert_sum - elevator);
     distrs[FRONT_RIGHT] *= (cubert_sum - elevator);
-    //
-    //    print_dists();
 
     distrs[BACK_LEFT]   *= rudder;
     distrs[FRONT_RIGHT] *= rudder;
@@ -166,9 +138,9 @@ void loop() {
     //    Serial.println();
     //    Serial.println((distrs[0] + distrs[1] + distrs[2] + distrs[3]));
 
-    if (verbose_loop) {
-      print_mico_dists();
-    }
+    //    if (verbose_loop) {
+    //      print_mico_dists();
+    //    }
 
   }
 }
@@ -189,5 +161,12 @@ void print_mico_dists() {
   Serial.println();
 }
 
-
-
+void print_channels() {
+  Serial.print(values[THROTTLE]);
+  Serial.print(',');
+  Serial.print(values[AILERON]);
+  Serial.print(',');
+  Serial.print(values[ELEVATOR]);
+  Serial.print(',');
+  Serial.println(values[RUDDER]);
+}

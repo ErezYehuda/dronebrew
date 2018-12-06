@@ -17,9 +17,12 @@ const size_t sVals = sizeof(size_example);
 RF24 radio(7, 8); // CE, CSN
 const byte address[6] = "00001";
 
+const bool verbose_setup = false, verbose_loop = false;
+
 void setup() {
   //  pinMode (KEYin, INPUT);
-  Serial.begin(9600);
+  if (verbose_setup || verbose_loop)
+    Serial.begin(9600);
 
   radio.begin();
   radio.openWritingPipe(address);
@@ -28,18 +31,22 @@ void setup() {
 }
 
 void loop() {
-  values[RUDDER] = analogRead (rudder_in);
   values[THROTTLE] = analogRead (throttle_in);
   values[AILERON] = analogRead(aileron_in);
   values[ELEVATOR] = analogRead(elevator_in);
+  values[RUDDER] = analogRead (rudder_in);
 
-  Serial.print(values[THROTTLE]);
-  Serial.print(',');
-  Serial.print(values[AILERON]);
-  Serial.print(',');
-  Serial.print(values[ELEVATOR]);
-  Serial.print(',');
-  Serial.print(values[RUDDER]);
-  Serial.print(',');
-  Serial.println(radio.write(&values, sVals));
+  if (verbose_loop) {
+    Serial.print(values[THROTTLE]);
+    Serial.print(',');
+    Serial.print(values[AILERON]);
+    Serial.print(',');
+    Serial.print(values[ELEVATOR]);
+    Serial.print(',');
+    Serial.print(values[RUDDER]);
+    Serial.print(',');
+    Serial.println(radio.write(&values, sVals));
+  } else {
+    radio.write(&values, sVals);
+  }
 }
