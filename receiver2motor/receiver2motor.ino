@@ -117,22 +117,10 @@ void loop() {
       distrs[i] = throttle;
     }
 
-    //    print_dists();
-
     distrs[FRONT_RIGHT] *= aileron;
     distrs[BACK_RIGHT]  *= aileron;
     distrs[FRONT_LEFT]  *= cubert_sum - aileron;
     distrs[BACK_LEFT]   *= cubert_sum - aileron;
-
-    //  Serial.println(aileron);
-    //  Serial.print("cubert_sum - ail:");
-    //  Serial.print(cubert_sum);
-    //  Serial.print(" - ");
-    //  Serial.print(aileron);
-    //  Serial.print(" = ");
-    //  Serial.println(cubert_sum-aileron);
-
-    //    print_dists();
 
     distrs[BACK_LEFT]   *= elevator;
     distrs[BACK_RIGHT]  *= elevator;
