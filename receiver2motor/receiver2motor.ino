@@ -9,7 +9,7 @@ enum Channels {THROTTLE, AILERON, ELEVATOR, RUDDER};
 // Rudder=Yaw->CW vs. CCW
 
 enum Motor { FRONT_LEFT, FRONT_RIGHT, BACK_LEFT, BACK_RIGHT};
-const int motor_ports[] = {9, 10, 11, 12};
+const int motor_ports[] = {5, 6, 9, 10};
 Servo motors [4];
 
 const int esc_top = 2200;
@@ -17,10 +17,10 @@ const int esc_bott = 850; // Technically, 700 might be acceptible, but it seems 
 const int esc_range = esc_top - esc_bott;
 
 // Some cube-root constants that allow the multiplied throttle distributions to never stray outside a ratio of 75:25
-const float cubert75 = cbrt(0.75);
-const float cubert25 = cbrt(0.25);
-const float cubert_sum = cubert75 + cubert25;
-const float inter_cubert = cubert75 - cubert25;
+const float cubert_upper = cbrt(0.75);
+const float cubert_lower = cbrt(0.25);
+const float cubert_sum = cubert_upper + cubert_lower;
+const float inter_cubert = cubert_upper - cubert_lower;
 const float cubert_coefficient = inter_cubert / 1023;
 
 const int size_example[4];
@@ -32,7 +32,7 @@ float distrs[4]; // Distributions of throttle
 RF24 radio(7, 8); // CE, CSN
 const byte address[6] = "00001";
 
-const bool verbose_setup = 1, verbose_loop = 1;
+const bool verbose_setup = true, verbose_loop = true;
 bool config_esc = false;
 
 void setup() {
@@ -109,9 +109,9 @@ void loop() {
     float throttle = (values[THROTTLE] - 512) * 2  / 1023.0;
     if (throttle < 0) throttle = 0;
     // Setting it up so that the product of aileron, elevator, and rudder for any given motor will be [0.25,0.75]
-    float aileron  = values[AILERON]  / 1023.0 * inter_cubert + cubert25;
-    float elevator = values[ELEVATOR] / 1023.0 * inter_cubert + cubert25;
-    float rudder   = values[RUDDER]   / 1023.0 * inter_cubert + cubert25;
+    float aileron  = values[AILERON]  / 1023.0 * inter_cubert + cubert_lower;
+    float elevator = values[ELEVATOR] / 1023.0 * inter_cubert + cubert_lower;
+    float rudder   = values[RUDDER]   / 1023.0 * inter_cubert + cubert_lower;
 
     for (int i = 0; i < 4; i++) {
       distrs[i] = throttle;
