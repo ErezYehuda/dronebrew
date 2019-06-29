@@ -21,7 +21,7 @@ const float cubert_upper = cbrt(0.75);
 const float cubert_lower = cbrt(0.25);
 const float cubert_sum = cubert_upper + cubert_lower;
 const float inter_cubert = cubert_upper - cubert_lower;
-const float cubert_coefficient = inter_cubert / 1023;
+const float cubert_scale_factor = 1 / (inter_cubert * 1023);
 
 const int size_example[4];
 const size_t vals_size = sizeof(size_example);
@@ -106,12 +106,12 @@ void loop() {
     // Rudder=Yaw->CW vs. CCW
 
     // Since my joystick defaults to the center, I'm setting it to treat mid as the bottom
-    float throttle = (values[THROTTLE] - 512) * 2  / 1023.0;
+    float throttle = (values[THROTTLE] - 512) / 512.0;
     if (throttle < 0) throttle = 0;
     // Setting it up so that the product of aileron, elevator, and rudder for any given motor will be [0.25,0.75]
-    float aileron  = values[AILERON]  / 1023.0 * inter_cubert + cubert_lower;
-    float elevator = values[ELEVATOR] / 1023.0 * inter_cubert + cubert_lower;
-    float rudder   = values[RUDDER]   / 1023.0 * inter_cubert + cubert_lower;
+    float aileron  = values[AILERON]  * cubert_scale_factor + cubert_lower;
+    float elevator = values[ELEVATOR] * cubert_scale_factor + cubert_lower;
+    float rudder   = values[RUDDER]   * cubert_scale_factor + cubert_lower;
 
     for (int i = 0; i < 4; i++) {
       distrs[i] = throttle;
