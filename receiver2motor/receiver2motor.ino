@@ -63,6 +63,8 @@ void setup() {
     Serial.println(values[THROTTLE]);
   }
 
+  int throttle;
+
   if (config_esc) {
     Serial.println("Configuring ESCs");
     // If it's within 3 of the top Y-position of the left joystick...
@@ -70,22 +72,33 @@ void setup() {
     do {
       if (radio.available()) {
         radio.read(&values, vals_size);
-        if (verbose_setup)
-          Serial.println(values[THROTTLE]);
       }
+
+      Serial.print(values[THROTTLE]);
+      Serial.print(" -> ");
+      //throttle = map(values[THROTTLE], 0, 1023, esc_bott, esc_top);
+      throttle = esc_top;
+      Serial.println(throttle);
       for (int i = 0; i < 4; i++)
-        motors[i].writeMicroseconds(map(values[THROTTLE], 0, 1023, esc_bott, esc_top));
+        motors[i].writeMicroseconds(throttle);
     } while (values[THROTTLE] > 10);
 
     // Wait for them to bring the throttle stick up again
     do {
-      if (radio.available())
+      if (radio.available()) {
         radio.read(&values, vals_size);
+      }
+
+      Serial.print(values[THROTTLE]);
+      Serial.print(" -> ");
+      //throttle = map(values[THROTTLE], 0, 1023, esc_bott, esc_top);
+      throttle = esc_bott;
+      Serial.println(throttle);
       for (int i = 0; i < 4; i++)
-        motors[i].writeMicroseconds(map(values[THROTTLE], 0, 1023, esc_bott, esc_top));
-      if (verbose_setup)
-        Serial.println(values[THROTTLE]);
+        motors[i].writeMicroseconds(throttle);
+
     } while (values[THROTTLE] < 1020);
+
     Serial.println("Ending ESC configuration");
   } else {
     Serial.println("Skipping ESC configuration");
@@ -109,9 +122,9 @@ void loop() {
     float throttle = (values[THROTTLE] - 512) / 512.0;
     if (throttle < 0) throttle = 0;
     // Setting it up so that the product of aileron, elevator, and rudder for any given motor will be [0.25,0.75]
-    float aileron  = values[AILERON]  * cubert_scale_factor + cubert_lower;
-    float elevator = values[ELEVATOR] * cubert_scale_factor + cubert_lower;
-    float rudder   = values[RUDDER]   * cubert_scale_factor + cubert_lower;
+    float aileron  = values[AILERON]  * inter_cubert / 1023.0 + cubert_lower;
+    float elevator = values[ELEVATOR] * inter_cubert / 1023.0 + cubert_lower;
+    float rudder   = values[RUDDER]   * inter_cubert / 1023.0 + cubert_lower;
 
     for (int i = 0; i < 4; i++) {
       distrs[i] = throttle;
@@ -139,19 +152,12 @@ void loop() {
     // Min microsecs: 1032.5
 
     for (int i = 0; i < 4; i++) {
-      //      Serial.print((int)(distrs[i] * esc_range + esc_bott));
-      //      //      Serial.print((distrs[i]) );
-      //      Serial.print(",");
       motors[i].writeMicroseconds((int)(distrs[i] * esc_range + esc_bott));
+      Serial.print((int)(distrs[i] * esc_range + esc_bott));
+      //      Serial.print(distrs[i]);
+      Serial.print(",");
     }
-    //    Serial.println();
-    //    Serial.println((distrs[0] + distrs[1] + distrs[2] + distrs[3]));
-
-    if (verbose_loop) {
-      //      print_dists();
-      print_mico_dists();
-    }
-
+    Serial.println();
   }
 }
 
