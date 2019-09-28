@@ -2,6 +2,11 @@
 #include <RF24.h>
 #include <Servo.h>
 
+void print_dists();
+void print_mico_dists();
+void print_channels();
+void configure_escs(bool verbose = false);
+
 enum Channels {THROTTLE, AILERON, ELEVATOR, RUDDER};
 // Throttle->All
 // Aileron=Roll->Left vs. Right
@@ -63,43 +68,8 @@ void setup() {
     Serial.println(values[THROTTLE]);
   }
 
-  int throttle;
-
   if (config_esc) {
-    Serial.println("Configuring ESCs");
-    // If it's within 3 of the top Y-position of the left joystick...
-    // Write the undistributed throttle to the motors until it gets below 4
-    do {
-      if (radio.available()) {
-        radio.read(&values, vals_size);
-      }
-
-      Serial.print(values[THROTTLE]);
-      Serial.print(" -> ");
-      //throttle = map(values[THROTTLE], 0, 1023, esc_bott, esc_top);
-      throttle = esc_top;
-      Serial.println(throttle);
-      for (int i = 0; i < 4; i++)
-        motors[i].writeMicroseconds(throttle);
-    } while (values[THROTTLE] > 10);
-
-    // Wait for them to bring the throttle stick up again
-    do {
-      if (radio.available()) {
-        radio.read(&values, vals_size);
-      }
-
-      Serial.print(values[THROTTLE]);
-      Serial.print(" -> ");
-      //throttle = map(values[THROTTLE], 0, 1023, esc_bott, esc_top);
-      throttle = esc_bott;
-      Serial.println(throttle);
-      for (int i = 0; i < 4; i++)
-        motors[i].writeMicroseconds(throttle);
-
-    } while (values[THROTTLE] < 1020);
-
-    Serial.println("Ending ESC configuration");
+    configure_escs(verbose_setup);
   } else {
     Serial.println("Skipping ESC configuration");
   }
@@ -185,4 +155,50 @@ void print_channels() {
   Serial.print(values[ELEVATOR]);
   Serial.print(',');
   Serial.println(values[RUDDER]);
+}
+
+void configure_escs(bool verbose = false) {
+  if (verbose)
+    Serial.println("Configuring ESCs");
+  int throttle;
+
+  // If it's within 3 of the top Y-position of the left joystick...
+  // Write the undistributed throttle to the motors until it gets below 4
+  do {
+    if (radio.available()) {
+      radio.read(&values, vals_size);
+    }
+
+    throttle = esc_top;
+    //throttle = map(values[THROTTLE], 0, 1023, esc_bott, esc_top);
+    if (verbose) {
+      Serial.print(values[THROTTLE]);
+      Serial.print(" -> ");
+      Serial.println(throttle);
+    }
+    for (int i = 0; i < 4; i++)
+      motors[i].writeMicroseconds(throttle);
+  } while (values[THROTTLE] > 10);
+
+  // Wait for them to bring the throttle stick up again
+  do {
+    if (radio.available()) {
+      radio.read(&values, vals_size);
+    }
+
+    //throttle = map(values[THROTTLE], 0, 1023, esc_bott, esc_top);
+    throttle = esc_bott;
+
+    if (verbose) {
+      Serial.print(values[THROTTLE]);
+      Serial.print(" -> ");
+      Serial.println(throttle);
+    }
+    for (int i = 0; i < 4; i++)
+      motors[i].writeMicroseconds(throttle);
+
+  } while (values[THROTTLE] < 1020);
+
+  if (verbose)
+    Serial.println("Ending ESC configuration");
 }
