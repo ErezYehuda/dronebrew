@@ -13,6 +13,9 @@ float roll, pitch, yaw;
 float AccErrorX = -35.26, AccErrorY = 35.26, GyroErrorX = -0.01, GyroErrorY = -0.01, GyroErrorZ = -0.01;
 float elapsedTime, currentTime, previousTime;
 int c = 0;
+
+char f2sb[10]; // Float->String buffer
+
 void setup() {
   Serial.begin(19200);
   Serial.println("Setting up!");
@@ -67,11 +70,12 @@ void loop() {
   GyroY = (Wire.read() << 8 | Wire.read()) / 131.0;
   GyroZ = (Wire.read() << 8 | Wire.read()) / 131.0;
 
-  Serial.print(GyroX);
-  Serial.print("/");
-  Serial.print(GyroY);
-  Serial.print("/");
-  Serial.println(GyroZ);
+
+  //  Serial.print(dtostrf(GyroX, 7, 4, f2sb));
+  //  Serial.print("/");
+  //  Serial.print(dtostrf(GyroY, 7, 4, f2sb));
+  //  Serial.print("/");
+  //  Serial.println(dtostrf(GyroZ, 7, 4, f2sb));
   // Correct the outputs with the calculated error values
   GyroX = GyroX - GyroErrorX; // GyroErrorX ~(-0.56)
   GyroY = GyroY - GyroErrorY; // GyroErrorY ~(2)
@@ -84,12 +88,12 @@ void loop() {
   roll = 0.96 * gyroAngleX + 0.04 * accAngleX;
   pitch = 0.96 * gyroAngleY + 0.04 * accAngleY;
 
-  // Print the values on the serial monitor
-  //  Serial.print(roll);
-  //  Serial.print("/");
-  //  Serial.print(pitch);
-  //  Serial.print("/");
-  //  Serial.println(yaw);
+  //   Print the values on the serial monitor
+  Serial.print(roll);
+  Serial.print("/");
+  Serial.print(pitch);
+  Serial.print("/");
+  Serial.println(yaw);
 }
 
 void calculate_IMU_error() {
@@ -107,6 +111,7 @@ void calculate_IMU_error() {
     AccX = (Wire.read() << 8 | Wire.read()) / 16384.0 ;
     AccY = (Wire.read() << 8 | Wire.read()) / 16384.0 ;
     AccZ = (Wire.read() << 8 | Wire.read()) / 16384.0 ;
+
     Serial.print(AccX);
     Serial.print("~");
     Serial.print(AccY);
@@ -143,18 +148,23 @@ void calculate_IMU_error() {
   GyroErrorZ = GyroErrorZ / 200;
   // Print the error values on the Serial Monitor
   Serial.print("AccErrorX: ");
-  Serial.println(AccErrorX);
+  Serial.println(dtostrf(AccErrorX, 7, 4, f2sb));
+
   Serial.print("AccErrorY: ");
-  Serial.println(AccErrorY);
+  Serial.println(dtostrf(AccErrorY, 7, 4, f2sb));
+
   Serial.print("GyroErrorX: ");
-  Serial.println(GyroErrorX);
+  Serial.println(dtostrf(GyroErrorX, 7, 4, f2sb));
+
   Serial.print("GyroErrorY: ");
-  Serial.println(GyroErrorY);
+  Serial.println(dtostrf(GyroErrorY, 7, 4, f2sb));
+
   Serial.print("GyroErrorZ: ");
-  Serial.println(GyroErrorZ);
+  Serial.println(dtostrf(GyroErrorZ, 7, 4, f2sb));
 }
 
 int get_i2c_address() {
+  Serial.println("Finding i2c address.");
   byte error, address;
   for (address = 1; address < 127; address++ )
   {
@@ -183,12 +193,12 @@ int get_i2c_address() {
       return 0;
     }
     //    else {
-    //      Serial.print("Looking for I2C device at address 0x");
-    //      if (address < 16)
-    //        Serial.print("0");
-    //      Serial.print(address, HEX);
-    //      Serial.println("  !");
-    //    }
+    //          Serial.print("Looking for I2C device at address 0x");
+    //          if (address < 16)
+    //            Serial.print("0");
+    //          Serial.print(address, HEX);
+    //          Serial.println("  !");
+    //        }
   }
 
   Serial.println("No I2C devices found\n");
