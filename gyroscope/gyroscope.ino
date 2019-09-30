@@ -12,7 +12,6 @@ float accAngleX, accAngleY, gyroAngleX, gyroAngleY, gyroAngleZ;
 float roll, pitch, yaw;
 float AccErrorX = -35.26, AccErrorY = 35.26, GyroErrorX = -0.01, GyroErrorY = -0.01, GyroErrorZ = -0.01;
 float elapsedTime, currentTime, previousTime;
-int c = 0;
 
 char f2sb[10]; // Float->String buffer
 
@@ -103,7 +102,7 @@ void calculate_IMU_error() {
 
   AccErrorX = 0, AccErrorY = 0, GyroErrorX = 0, GyroErrorY = 0, GyroErrorZ = 0;
 
-  while (c < 200) {
+  for (byte i = 0; i < 200; i++) {
     Wire.beginTransmission(MPU);
     Wire.write(0x3B);
     Wire.endTransmission(false);
@@ -121,14 +120,12 @@ void calculate_IMU_error() {
     // Sum all readings
     AccErrorX = AccErrorX + ((atan((AccY) / sqrt(pow((AccX), 2) + pow((AccZ), 2))) * 180 / PI));
     AccErrorY = AccErrorY + ((atan(-1 * (AccX) / sqrt(pow((AccY), 2) + pow((AccZ), 2))) * 180 / PI));
-    c++;
   }
   //Divide the sum by 200 to get the error value
   AccErrorX = AccErrorX / 200;
   AccErrorY = AccErrorY / 200;
-  c = 0;
   // Read gyro values 200 times
-  while (c < 200) {
+  for (byte i = 0; i < 200; i++) {
     Wire.beginTransmission(MPU);
     Wire.write(0x43);
     Wire.endTransmission(false);
@@ -140,7 +137,6 @@ void calculate_IMU_error() {
     GyroErrorX = GyroErrorX + (GyroX / 131.0);
     GyroErrorY = GyroErrorY + (GyroY / 131.0);
     GyroErrorZ = GyroErrorZ + (GyroZ / 131.0);
-    c++;
   }
   //Divide the sum by 200 to get the error value
   GyroErrorX = GyroErrorX / 200;
