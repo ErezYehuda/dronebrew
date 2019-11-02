@@ -10,6 +10,7 @@ void configure_escs(bool verbose = false);
 int get_i2c_address();
 void calculate_IMU_error();
 void configure_gyroscope(bool should_calculate_imu_error, bool verbose = false);
+void read_gyro(bool verbose = false);
 
 char f2sb[10]; // Float->String buffer
 
@@ -106,6 +107,11 @@ void setup() {
     }
     else i -= 1;
 
+  // Just set it to true if there's no input
+  if (values[0] + values[1] + values[2] + values[3] == 0) {
+    find_gyro_error = true;
+  }
+
   configure_gyroscope(find_gyro_error);
 }
 
@@ -125,11 +131,13 @@ void loop() {
 
     for (int i = 0; i < 4; i++) {
       motors[i].writeMicroseconds((int)(distrs[i] * esc_range + esc_bott));
-      Serial.print((int)(distrs[i] * esc_range + esc_bott));
-      Serial.print(",");
+      //      Serial.print((int)(distrs[i] * esc_range + esc_bott));
+      //      Serial.print(",");
     }
-    Serial.println();
+    //    Serial.println();
   }
+
+  read_gyro(true);
 }
 
 void print_dists() {
@@ -215,7 +223,6 @@ void configure_gyroscope(bool should_calculate_imu_error, bool verbose = false) 
   if (should_calculate_imu_error)
     calculate_IMU_error();
 }
-
 
 void calculate_IMU_error() {
   // We can call this funtion in the setup section to calculate the accelerometer and gyro data error. From here we will get the error values used in the above equations printed on the Serial Monitor.
@@ -321,4 +328,57 @@ int get_i2c_address() {
 
   Serial.println("No I2C devices found\n");
   return 0;
+}
+
+void read_gyro(bool verbose = false) {
+  // === Read acceleromter data === //
+  Wire.beginTransmission(MPU);
+  Wire.write(0x3B); // Start with register 0x3B (ACCEL_XOUT_H)
+  Wire.endTransmission(false);
+  Wire.requestFrom(MPU, 6, true); // Read 6 registers total, each axis value is stored in 2 registers
+  //For a range of +-2g, we need to divide the raw values by 16384, according to the datasheet
+  AccX = (Wire.read() << 8 | Wire.read()) / 16384.0; // X-axis value
+  AccY = (Wire.read() << 8 | Wire.read()) / 16384.0; // Y-axis value
+  AccZ = (Wire.read() << 8 | Wire.read()) / 16384.0; // Z-axis value
+  // Calculating Roll and Pitch from the accelerometer data
+  accAngleX = (atan(AccY / sqrt(pow(AccX, 2) + pow(AccZ, 2))) * 180 / PI) - AccErrorX; // AccErrorX ~(0.58) See the calculate_IMU_error()custom function for more details
+  accAngleY = (atan(-1 * AccX / sqrt(pow(AccY, 2) + pow(AccZ, 2))) * 180 / PI)  - AccErrorY; // AccErrorY ~(-1.58)
+  // === Read gyroscope data === //
+  previousTime = currentTime;        // Previous time is stored before the actual time read
+  currentTime = millis();            // Current time actual time read
+  elapsedTime = (currentTime - previousTime) / 1000; // Divide by 1000 to get seconds
+  Wire.beginTransmission(MPU);
+  Wire.write(0x43); // Gyro data first register address 0x43
+  Wire.endTransmission(false);
+  Wire.requestFrom(MPU, 6, true); // Read 4 registers total, each axis value is stored in 2 registers
+  GyroX = (Wire.read() << 8 | Wire.read()) / 131.0 - GyroErrorX; // For a 250deg/s range we have to divide first the raw value by 131.0, according to the datasheet
+  GyroY = (Wire.read() << 8 | Wire.read()) / 131.0 - GyroErrorY;
+  GyroZ = (Wire.read() << 8 | Wire.read()) / 131.0 - GyroErrorZ;
+
+  //  if (verbose) {
+  //    Serial.print("~~");
+  //    Serial.print(dtostrf(GyroX, 7, 4, f2sb));
+  //    Serial.print("/");
+  //    Serial.print(dtostrf(GyroY, 7, 4, f2sb));
+  //    Serial.print("/");
+  //    Serial.println(dtostrf(GyroZ, 7, 4, f2sb));
+  //  }
+
+  // Currently the raw values are in degrees per seconds, deg/s, so we need to multiply by sendonds (s) to get the angle in degrees
+  gyroAngleX = gyroAngleX + GyroX * elapsedTime; // deg/s * s = deg
+  gyroAngleY = gyroAngleY + GyroY * elapsedTime;
+  yaw =  yaw + GyroZ * elapsedTime;
+  // Complementary filter - combine acceleromter and gyro angle values
+  roll =  gyroAngleX + accAngleX;
+  pitch = gyroAngleY +  accAngleY;
+
+  //   Print the values on the serial monitor
+  if (verbose) {
+    Serial.print("~~");
+    Serial.print(dtostrf(roll, 7, 4, f2sb));
+    Serial.print("/");
+    Serial.print(dtostrf(pitch, 7, 4, f2sb));
+    Serial.print("/");
+    Serial.println(dtostrf(yaw, 7, 4, f2sb));
+  }
 }
