@@ -39,9 +39,12 @@ void setup() {
 
 void loop() {
   values[THROTTLE] = analogRead (throttle_in);
-  values[AILERON] = analogRead(aileron_in);
+  values[AILERON] = 1024 - analogRead(aileron_in);
   values[ELEVATOR] = analogRead(elevator_in);
   values[RUDDER] = analogRead (rudder_in);
+
+  if (values[AILERON] < 0)
+    values[AILERON] = 0;
 
   // Continuously calibrate; maybe I'll add in something to trim the channels, but until then...
   for (int i = 0; i < 4; i++) {
