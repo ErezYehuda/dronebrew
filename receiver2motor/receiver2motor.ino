@@ -28,7 +28,7 @@ const float cubert_sum = cubert_upper + cubert_lower;
 const float inter_cubert = cubert_upper - cubert_lower;
 const float cubert_scale_factor = 1 / (inter_cubert * 1023);
 
-const int size_example[4];
+const int size_example[] = {1, 1, 1, 1};
 const size_t vals_size = sizeof(size_example);
 
 int values[4];
@@ -128,6 +128,8 @@ void loop() {
       Serial.print(",");
     }
     Serial.println();
+  } else {
+    Serial.println("R--");
   }
 }
 

@@ -3,17 +3,17 @@
 
 enum Channels {THROTTLE, AILERON, ELEVATOR, RUDDER};
 
-const int rudder_in    = A0; // X Input Pin of Analog 0
-const int throttle_in  = A1; // Y Input Pin of Analog 1
-const int aileron_in   = A2; // X Input Pin of Analog 2
-const int elevator_in  = A3; // Y Input Pin of Analog 3
+const int throttle_in  = A0; // X Input Pin of Analog 0
+const int rudder_in    = A1; // Y Input Pin of Analog 1
+const int elevator_in  = A2; // X Input Pin of Analog 2
+const int aileron_in   = A3; // Y Input Pin of Analog 3
 
 //const int KEYin = 3; // Push Button
 int joy_min[4];
 int joy_max[4];
 int values[4];
 
-int size_example[4];
+int size_example[4] = {1, 1, 1, 1};
 const size_t sVals = sizeof(size_example);
 
 RF24 radio(7, 8); // CE, CSN
@@ -53,6 +53,10 @@ void loop() {
     values[i] = map(values[i], joy_min[i], joy_max[i], 0, 1023);
   }
 
+  radio_write();
+}
+
+void radio_write() {
   if (verbose_loop) {
     Serial.print(values[THROTTLE]);
     Serial.print(',');
@@ -65,5 +69,22 @@ void loop() {
     Serial.println(radio.write(&values, sVals));
   } else {
     radio.write(&values, sVals);
+  }
+}
+
+void throttle_locker() {
+  values[THROTTLE] = analogRead (throttle_in);
+  values[AILERON] = analogRead(aileron_in);
+  values[ELEVATOR] = analogRead(elevator_in);
+  values[RUDDER] = analogRead (rudder_in);
+
+  while (values[THROTTLE] >= 100) {
+    values[THROTTLE] = 1023;
+    radio_write();
+  }
+
+  while (values[THROTTLE] <= 1000) {
+    values[THROTTLE] = 0;
+    radio_write();
   }
 }
