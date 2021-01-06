@@ -1,6 +1,63 @@
 
 #include <RF24.h>
 #include <Servo.h>
+#include "I2Cdev.h"
+#include "MPU6050.h"
+
+// GYRO/ACCEL FEATURES
+
+// Mostly borrowed from I2Cdev MPU6050_raw
+// Arduino Wire library is required if I2Cdev I2CDEV_ARDUINO_WIRE implementation
+// is used in I2Cdev.h
+#if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
+#include "Wire.h"
+#endif
+
+// class default I2C address is 0x68
+// specific I2C addresses may be passed as a parameter here
+// AD0 low = 0x68 (default for InvenSense evaluation board)
+// AD0 high = 0x69
+MPU6050 accelgyro;
+//MPU6050 accelgyro(0x69); // <-- use for AD0 high
+
+int16_t ax, ay, az;
+int16_t gx, gy, gz;
+
+// uncomment "OUTPUT_READABLE_ACCELGYRO" if you want to see a tab-separated
+// list of the accel X/Y/Z and then gyro X/Y/Z values in decimal. Easy to read,
+// not so easy to parse, and slow(er) over UART.
+#define OUTPUT_READABLE_ACCELGYRO
+
+// uncomment "OUTPUT_BINARY_ACCELGYRO" to send all 6 axes of data as 16-bit
+// binary, one right after the other. This is very fast (as fast as possible
+// without compression or data loss), and easy to parse, but impossible to read
+// for a human.
+//#define OUTPUT_BINARY_ACCELGYRO
+
+/*
+   Offsets calculated by https://www.i2cdevlib.com/forums/applications/core/interface/file/attachment.php?id=27
+   Linked to from https://www.i2cdevlib.com/forums/topic/96-arduino-sketch-to-automatically-calculate-mpu6050-offsets/
+   Sensor readings with offsets: -2  -10 16386 -2  -1  0
+   Your offsets: -1185 301 1083  92  -137  28
+
+   Data is printed as: acelX acelY acelZ giroX giroY giroZ
+   Check that your sensor readings are close to 0 0 16384 0 0 0
+*/
+const int x_accel_offset = -1185;
+const int y_accel_offset = 301;
+const int z_accel_offset = 1083;
+const int x_gyro_offset = 92;
+const int y_gyro_offset = -137;
+const int z_gyro_offset = 28;
+
+// Gyro Range: [-32768, +32767]
+// -32768 and +32767 are the ranges where the drone has flipped upside down,
+// so we really only want to consider 
+const int gyro_min = -32768 / 2;
+const int gyro_max = (32767 + 1) / 2;
+// The +1 is just to make it an easy integer division
+
+// END OF GYRO/ACCEL FEATURES
 
 void print_dists();
 void print_mico_dists();
@@ -44,6 +101,28 @@ void setup() {
   if (verbose_setup || verbose_loop)
     Serial.begin(9600);
 
+  // join I2C bus (I2Cdev library doesn't do this automatically)
+#if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
+  Wire.begin();
+#elif I2CDEV_IMPLEMENTATION == I2CDEV_BUILTIN_FASTWIRE
+  Fastwire::setup(400, true);
+#endif
+
+  // initialize device
+  Serial.println("Initializing I2C devices...");
+  accelgyro.initialize();
+
+  // verify connection
+  Serial.println("Testing device connections...");
+  Serial.println(accelgyro.testConnection() ? "MPU6050 connection successful" : "MPU6050 connection failed");
+
+  accelgyro.setXAccelOffset(x_accel_offset);
+  accelgyro.setYAccelOffset(y_accel_offset);
+  accelgyro.setZAccelOffset(z_accel_offset);
+  accelgyro.setXGyroOffset(x_gyro_offset);
+  accelgyro.setYGyroOffset(y_gyro_offset);
+  accelgyro.setZGyroOffset(z_gyro_offset);
+
   for (int i = 0; i < 4; i++)
     motors[i].attach(motor_ports[i]);
 
@@ -76,6 +155,28 @@ void setup() {
 }
 
 void loop() {
+  accelgyro.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
+
+#ifdef OUTPUT_READABLE_ACCELGYRO
+  // display tab-separated accel/gyro x/y/z values
+  Serial.print("a/g:\t");
+  Serial.print(ax); Serial.print("\t");
+  Serial.print(ay); Serial.print("\t");
+  Serial.print(az); Serial.print("\t");
+  Serial.print(gx); Serial.print("\t");
+  Serial.print(gy); Serial.print("\t");
+  Serial.println(gz);
+#endif
+
+#ifdef OUTPUT_BINARY_ACCELGYRO
+  Serial.write((uint8_t)(ax >> 8)); Serial.write((uint8_t)(ax & 0xFF));
+  Serial.write((uint8_t)(ay >> 8)); Serial.write((uint8_t)(ay & 0xFF));
+  Serial.write((uint8_t)(az >> 8)); Serial.write((uint8_t)(az & 0xFF));
+  Serial.write((uint8_t)(gx >> 8)); Serial.write((uint8_t)(gx & 0xFF));
+  Serial.write((uint8_t)(gy >> 8)); Serial.write((uint8_t)(gy & 0xFF));
+  Serial.write((uint8_t)(gz >> 8)); Serial.write((uint8_t)(gz & 0xFF));
+#endif
+
   if (radio.available()) {
     radio.read(&values, vals_size);
 
@@ -110,10 +211,12 @@ void loop() {
     distrs[FRONT_LEFT]  *= cubert_sum - elevator;
     distrs[FRONT_RIGHT] *= cubert_sum - elevator;
 
-    distrs[BACK_LEFT]   *= rudder;
-    distrs[FRONT_RIGHT] *= rudder;
-    distrs[FRONT_LEFT]  *= cubert_sum - rudder;
-    distrs[BACK_RIGHT]  *= cubert_sum - rudder;
+
+    // Temporarily disabling rudder/yaw while I calculate the diff between the desired distri
+    //    distrs[BACK_LEFT]   *= rudder;
+    //    distrs[FRONT_RIGHT] *= rudder;
+    //    distrs[FRONT_LEFT]  *= cubert_sum - rudder;
+    //    distrs[BACK_RIGHT]  *= cubert_sum - rudder;
 
 
     // Some reference values (at full throttle):
