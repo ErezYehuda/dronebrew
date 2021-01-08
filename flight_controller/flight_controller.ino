@@ -51,11 +51,10 @@ const int y_gyro_offset = -137;
 const int z_gyro_offset = 28;
 
 // Gyro Range: [-32768, +32767]
-// -32768 and +32767 are the ranges where the drone has flipped upside down,
-// so we really only want to consider 
-const int gyro_min = -32768 / 2;
-const int gyro_max = (32767 + 1) / 2;
-// The +1 is just to make it an easy integer division
+const int gyro_min = -32768;
+const int gyro_max = 32767;
+const int gyro_goal_min = -8192;
+const int gyro_goal_max = 8192;
 
 // END OF GYRO/ACCEL FEATURES
 
@@ -180,9 +179,9 @@ void loop() {
   if (radio.available()) {
     radio.read(&values, vals_size);
 
-    //        if (verbose_loop) {
-    //          print_channels();
-    //        }
+    //    if (verbose_loop) {
+    //      print_channels();
+    //    }
 
     // Throttle->All
     // Aileron=Roll->Left vs. Right
@@ -192,10 +191,12 @@ void loop() {
     // Since my joystick defaults to the center, I'm setting it to treat mid as the bottom
     float throttle = (values[THROTTLE] - 512) / 512.0;
     if (throttle < 0) throttle = 0;
-    // Setting it up so that the product of aileron, elevator, and rudder for any given motor will be [0.25,0.75]
-    float aileron  = values[AILERON]  * inter_cubert / 1023.0 + cubert_lower;
-    float elevator = values[ELEVATOR] * inter_cubert / 1023.0 + cubert_lower;
-    float rudder   = values[RUDDER]   * inter_cubert / 1023.0 + cubert_lower;
+    //    // Setting it up so that the product of aileron, elevator, and rudder for any given motor will be [0.25,0.75]
+    //    float aileron  = values[AILERON]  * inter_cubert / 1023.0 + cubert_lower;
+    //    float elevator = values[ELEVATOR] * inter_cubert / 1023.0 + cubert_lower;
+    //    float rudder   = values[RUDDER]   * inter_cubert / 1023.0 + cubert_lower;
+    int aileron  = map(values[AILERON], 0, 1023, gyro_goal_min, gyro_goal_max);
+    int elevator = map(values[ELEVATOR], 0, 1023, gyro_goal_min, gyro_goal_max);
 
     for (int i = 0; i < 4; i++) {
       distrs[i] = throttle;
@@ -211,12 +212,10 @@ void loop() {
     distrs[FRONT_LEFT]  *= cubert_sum - elevator;
     distrs[FRONT_RIGHT] *= cubert_sum - elevator;
 
-
-    // Temporarily disabling rudder/yaw while I calculate the diff between the desired distri
-    //    distrs[BACK_LEFT]   *= rudder;
-    //    distrs[FRONT_RIGHT] *= rudder;
-    //    distrs[FRONT_LEFT]  *= cubert_sum - rudder;
-    //    distrs[BACK_RIGHT]  *= cubert_sum - rudder;
+    distrs[BACK_LEFT]   *= rudder;
+    distrs[FRONT_RIGHT] *= rudder;
+    distrs[FRONT_LEFT]  *= cubert_sum - rudder;
+    distrs[BACK_RIGHT]  *= cubert_sum - rudder;
 
 
     // Some reference values (at full throttle):
@@ -225,10 +224,11 @@ void loop() {
     // Min microsecs: 1032.5
 
     for (int i = 0; i < 4; i++) {
-      motors[i].writeMicroseconds((int)(distrs[i] * esc_range + esc_bott));
-      Serial.print((int)(distrs[i] * esc_range + esc_bott));
-      //      Serial.print(distrs[i]);
-      Serial.print(",");
+      int microseconds = (int)(distrs[i] * esc_range + esc_bott);
+      motors[i].writeMicroseconds(microseconds);
+      //      Serial.print(microseconds);
+      //      //      Serial.print(distrs[i]);
+      //      Serial.print(",");
     }
     Serial.println();
   } else {
