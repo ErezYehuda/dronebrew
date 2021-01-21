@@ -3,10 +3,10 @@
 
 enum Channels {THROTTLE, AILERON, ELEVATOR, RUDDER};
 
-const int throttle_in  = A0; // X Input Pin of Analog 0
-const int rudder_in    = A1; // Y Input Pin of Analog 1
-const int elevator_in  = A2; // X Input Pin of Analog 2
-const int aileron_in   = A3; // Y Input Pin of Analog 3
+const int THROTTLE_PIN  = A0; // X Input Pin of Analog 0
+const int RUDDER_PIN    = A1; // Y Input Pin of Analog 1
+const int ELEVATOR_PIN  = A2; // X Input Pin of Analog 2
+const int AILERON_PIN   = A3; // Y Input Pin of Analog 3
 
 //const int KEYin = 3; // Push Button
 int joy_min[4];
@@ -38,13 +38,22 @@ void setup() {
 }
 
 void loop() {
-  values[THROTTLE] = analogRead (throttle_in);
-  values[AILERON] = 1024 - analogRead(aileron_in);
-  values[ELEVATOR] = analogRead(elevator_in);
-  values[RUDDER] = analogRead (rudder_in);
+  values[THROTTLE] = analogRead (THROTTLE_PIN);
+  values[AILERON] = analogRead(AILERON_PIN);
+  values[ELEVATOR] = analogRead(ELEVATOR_PIN);
+  values[RUDDER] = analogRead (RUDDER_PIN);
 
-  if (values[AILERON] < 0)
-    values[AILERON] = 0;
+  float _x = (values[AILERON] - 512) / 512.0;
+  float _y = (values[ELEVATOR] - 512) / 512.0;
+  float _z = sqrt(_x * _x + _y * _y);
+
+  if (_z > 1) {
+    _x = _x / _z;
+    _y = _y / _z;
+  }
+
+  values[AILERON] = (int)(_x * 512 + 512);
+  values[ELEVATOR] = (int)(_y * 512 + 512);
 
   // Continuously calibrate; maybe I'll add in something to trim the channels, but until then...
   for (int i = 0; i < 4; i++) {
@@ -76,10 +85,10 @@ void radio_write() {
 }
 
 void throttle_locker() {
-  values[THROTTLE] = analogRead (throttle_in);
-  values[AILERON] = analogRead(aileron_in);
-  values[ELEVATOR] = analogRead(elevator_in);
-  values[RUDDER] = analogRead (rudder_in);
+  values[THROTTLE] = analogRead (THROTTLE_PIN);
+  values[AILERON] = analogRead(AILERON_PIN);
+  values[ELEVATOR] = analogRead(ELEVATOR_PIN);
+  values[RUDDER] = analogRead (RUDDER_PIN);
 
   while (values[THROTTLE] >= 100) {
     values[THROTTLE] = 1023;

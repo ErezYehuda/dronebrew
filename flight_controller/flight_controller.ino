@@ -1,4 +1,4 @@
-
+//#include <PID_v1.h>
 #include <RF24.h>
 #include <Servo.h>
 #include "I2Cdev.h"
@@ -26,7 +26,7 @@ int16_t gx, gy, gz;
 // uncomment "OUTPUT_READABLE_ACCELGYRO" if you want to see a tab-separated
 // list of the accel X/Y/Z and then gyro X/Y/Z values in decimal. Easy to read,
 // not so easy to parse, and slow(er) over UART.
-#define OUTPUT_READABLE_ACCELGYRO
+//#define OUTPUT_READABLE_ACCELGYRO
 
 // uncomment "OUTPUT_BINARY_ACCELGYRO" to send all 6 axes of data as 16-bit
 // binary, one right after the other. This is very fast (as fast as possible
@@ -43,25 +43,25 @@ int16_t gx, gy, gz;
    Data is printed as: acelX acelY acelZ giroX giroY giroZ
    Check that your sensor readings are close to 0 0 16384 0 0 0
 */
-const int x_accel_offset = -1185;
-const int y_accel_offset = 301;
-const int z_accel_offset = 1083;
-const int x_gyro_offset = 92;
-const int y_gyro_offset = -137;
-const int z_gyro_offset = 28;
+const int X_ACCEL_OFFSET = -1185;
+const int Y_ACCEL_OFFSET = 301;
+const int Z_ACCEL_OFFSET = 1083;
+const int X_GYRO_OFFSET = 92;
+const int Y_GYRO_OFFSET = -137;
+const int Z_GYRO_OFFSET = 28;
 
 // Gyro Range: [-32768, +32767]
-const int gyro_min = -32768;
-const int gyro_max = 32767;
-const int gyro_goal_min = -8192;
-const int gyro_goal_max = 8192;
+const int GYRO_MIN = -32768;
+const int GYRO_MAX = 32767;
+const int GYRO_MOTOR_MIN = -16384;
+const int GYRO_MOTOR_MAX = 16384;
+const int GYRO_GOAL_MIN = -8192;
+const int GYRO_GOAL_MAX = 8192;
 
 // END OF GYRO/ACCEL FEATURES
 
-void print_dists();
-void print_mico_dists();
-void print_channels();
-void configure_escs(bool verbose = false);
+
+// MOTOR FEATURES
 
 enum Channels {THROTTLE, AILERON, ELEVATOR, RUDDER};
 // Throttle->All
@@ -73,16 +73,44 @@ enum Motor { FRONT_LEFT, FRONT_RIGHT, BACK_LEFT, BACK_RIGHT};
 const int motor_ports[] = {5, 6, 9, 10};
 Servo motors [4];
 
-const int esc_top = 2200;
-const int esc_bott = 850; // Technically, 700 might be acceptible, but it seems to be unreliable for the ESCs to read
-const int esc_range = esc_top - esc_bott;
+const int ESC_MAX = 2200;
+const int ESC_MIN = 850; // Technically, 700 might be acceptible, but it seems to be unreliable for the ESCs to read
+const int ESC_RANGE = ESC_MAX - ESC_MIN;
+const float CUBERT_ESC_RANGE = cbrt(ESC_RANGE);
+
+// END OF MOTOR FEATURES
+
+// PID FEATURES
+
+struct PID {
+  float x_result;
+  float y_result;
+};
+
+float COEFFICIENT_PROPORTIONAL = 0.05;
+float COEFFICIENT_INTEGRAL = 0.25;
+// float COEFFICIENT_DERIVATIVE = 0.25;
+float PID_MAX_OUTPUT = ESC_RANGE;
+float pid_previous_time;
+float x_gyro_integral_error;
+float y_gyro_integral_error;
+float x_gyro_previous_value;
+float y_gyro_previous_value;
+
+// END OF PID FEATURES
+
+void print_dists();
+void print_mico_dists();
+void print_channels();
+void configure_escs(bool verbose);
+
 
 // Some cube-root constants that allow the multiplied throttle distributions to never stray outside a ratio of 75:25
-const float cubert_upper = cbrt(0.75);
-const float cubert_lower = cbrt(0.25);
-const float cubert_sum = cubert_upper + cubert_lower;
-const float inter_cubert = cubert_upper - cubert_lower;
-const float cubert_scale_factor = 1 / (inter_cubert * 1023);
+const float CUBERT_UPPER = cbrt(0.75);
+const float CUBERT_LOWER = cbrt(0.25);
+const float CUBERT_SUM = CUBERT_UPPER + CUBERT_LOWER;
+const float INTER_CUBERT = CUBERT_UPPER - CUBERT_LOWER;
+const float CUBERT_SCALE_FACTOR = 1 / (INTER_CUBERT * 1023);
 
 const int size_example[] = {1, 1, 1, 1};
 const size_t vals_size = sizeof(size_example);
@@ -115,12 +143,12 @@ void setup() {
   Serial.println("Testing device connections...");
   Serial.println(accelgyro.testConnection() ? "MPU6050 connection successful" : "MPU6050 connection failed");
 
-  accelgyro.setXAccelOffset(x_accel_offset);
-  accelgyro.setYAccelOffset(y_accel_offset);
-  accelgyro.setZAccelOffset(z_accel_offset);
-  accelgyro.setXGyroOffset(x_gyro_offset);
-  accelgyro.setYGyroOffset(y_gyro_offset);
-  accelgyro.setZGyroOffset(z_gyro_offset);
+  accelgyro.setXAccelOffset(X_ACCEL_OFFSET);
+  accelgyro.setYAccelOffset(Y_ACCEL_OFFSET);
+  accelgyro.setZAccelOffset(Z_ACCEL_OFFSET);
+  accelgyro.setXGyroOffset(X_GYRO_OFFSET);
+  accelgyro.setYGyroOffset(Y_GYRO_OFFSET);
+  accelgyro.setZGyroOffset(Z_GYRO_OFFSET);
 
   for (int i = 0; i < 4; i++)
     motors[i].attach(motor_ports[i]);
@@ -191,43 +219,62 @@ void loop() {
     // Since my joystick defaults to the center, I'm setting it to treat mid as the bottom
     float throttle = (values[THROTTLE] - 512) / 512.0;
     if (throttle < 0) throttle = 0;
-    //    // Setting it up so that the product of aileron, elevator, and rudder for any given motor will be [0.25,0.75]
-    //    float aileron  = values[AILERON]  * inter_cubert / 1023.0 + cubert_lower;
-    //    float elevator = values[ELEVATOR] * inter_cubert / 1023.0 + cubert_lower;
-    //    float rudder   = values[RUDDER]   * inter_cubert / 1023.0 + cubert_lower;
-    int aileron  = map(values[AILERON], 0, 1023, gyro_goal_min, gyro_goal_max);
-    int elevator = map(values[ELEVATOR], 0, 1023, gyro_goal_min, gyro_goal_max);
 
     for (int i = 0; i < 4; i++) {
       distrs[i] = throttle;
     }
 
-    distrs[FRONT_RIGHT] *= aileron;
-    distrs[BACK_RIGHT]  *= aileron;
-    distrs[FRONT_LEFT]  *= cubert_sum - aileron;
-    distrs[BACK_LEFT]   *= cubert_sum - aileron;
+    int controller_aileron  = map(values[AILERON], 0, 1023, GYRO_GOAL_MIN, GYRO_GOAL_MAX);
+    int controller_elevator = map(values[ELEVATOR], 0, 1023, GYRO_GOAL_MIN, GYRO_GOAL_MAX);
+    int controller_rudder = map(values[RUDDER], 0, 1023, 0, ESC_RANGE);
 
-    distrs[BACK_LEFT]   *= elevator;
-    distrs[BACK_RIGHT]  *= elevator;
-    distrs[FRONT_LEFT]  *= cubert_sum - elevator;
-    distrs[FRONT_RIGHT] *= cubert_sum - elevator;
+    Serial.print(values[AILERON]);
+    Serial.print(",");
+    Serial.print(values[ELEVATOR]);
+    Serial.println();
 
-    distrs[BACK_LEFT]   *= rudder;
-    distrs[FRONT_RIGHT] *= rudder;
-    distrs[FRONT_LEFT]  *= cubert_sum - rudder;
-    distrs[BACK_RIGHT]  *= cubert_sum - rudder;
+    //calc_pid(float x_target, float x_current, float y_target, float y_current)
+    PID new_pid = calc_pid(controller_aileron, gx, controller_elevator, gy);
 
+    //    Serial.print(new_pid.x_result);
+    //    Serial.print(",");
+    //    Serial.println(new_pid.y_result);
 
-    // Some reference values (at full throttle):
-    // Max microsecs: 1677.5
-    // Mid microsecs: 1290.5 (this is the value of esc_range)
-    // Min microsecs: 1032.5
+    float new_aileron = map(new_pid.x_result, GYRO_MOTOR_MIN, GYRO_MOTOR_MAX, 0, ESC_RANGE);
+    float cubert_aileron = cbrt(new_aileron);
+    float cubert_inv_aileron = cbrt(ESC_RANGE - new_aileron);
+
+    float new_elevator = map(new_pid.y_result, GYRO_MOTOR_MIN, GYRO_MOTOR_MAX, 0, ESC_RANGE);
+    float cubert_elevator = cbrt(new_elevator);
+    float cubert_inv_elevator = cbrt(ESC_RANGE - new_aileron);
+
+    float cubert_rudder = cbrt(controller_rudder);
+    float cubert_inv_rudder = cbrt(ESC_RANGE - controller_rudder);
+
+    distrs[FRONT_LEFT]  *= cubert_aileron;
+    distrs[BACK_LEFT]   *= cubert_aileron;
+    distrs[FRONT_RIGHT] *= cubert_inv_aileron;
+    distrs[BACK_RIGHT]  *= cubert_inv_aileron;
+
+    distrs[BACK_LEFT]   *= cubert_elevator;
+    distrs[BACK_RIGHT]  *= cubert_elevator;
+    distrs[FRONT_LEFT]  *= cubert_inv_elevator;
+    distrs[FRONT_RIGHT] *= cubert_inv_elevator;
+
+    distrs[BACK_LEFT]   *= cubert_rudder;
+    distrs[FRONT_RIGHT] *= cubert_rudder;
+    distrs[FRONT_LEFT]  *= cubert_inv_rudder;
+    distrs[BACK_RIGHT]  *= cubert_inv_rudder;
 
     for (int i = 0; i < 4; i++) {
-      int microseconds = (int)(distrs[i] * esc_range + esc_bott);
+      distrs[i] += ESC_MIN;
+    }
+
+    for (int i = 0; i < 4; i++) {
+      int microseconds = (int)(distrs[i]);
       motors[i].writeMicroseconds(microseconds);
       //      Serial.print(microseconds);
-      //      //      Serial.print(distrs[i]);
+      //      //      //      Serial.print(distrs[i]);
       //      Serial.print(",");
     }
     Serial.println();
@@ -246,7 +293,7 @@ void print_dists() {
 
 void print_mico_dists() {
   for (int i = 0; i < 4; i++) {
-    Serial.print((int)(distrs[i] * esc_range + esc_bott));
+    Serial.print((int)(distrs[i] * ESC_RANGE + ESC_MIN));
     Serial.print(',');
   }
   Serial.println();
@@ -274,8 +321,8 @@ void configure_escs(bool verbose = false) {
       radio.read(&values, vals_size);
     }
 
-    throttle = esc_top;
-    //throttle = map(values[THROTTLE], 0, 1023, esc_bott, esc_top);
+    throttle = ESC_MAX;
+    //throttle = map(values[THROTTLE], 0, 1023, ESC_MIN, ESC_MAX);
     if (verbose) {
       Serial.print(values[THROTTLE]);
       Serial.print(" -> ");
@@ -291,8 +338,8 @@ void configure_escs(bool verbose = false) {
       radio.read(&values, vals_size);
     }
 
-    //throttle = map(values[THROTTLE], 0, 1023, esc_bott, esc_top);
-    throttle = esc_bott;
+    //throttle = map(values[THROTTLE], 0, 1023, ESC_MIN, ESC_MAX);
+    throttle = ESC_MIN;
 
     if (verbose) {
       Serial.print(values[THROTTLE]);
@@ -306,4 +353,65 @@ void configure_escs(bool verbose = false) {
 
   if (verbose)
     Serial.println("Ending ESC configuration");
+}
+
+
+/*
+  float COEFFICIENT_PROPORTIONAL;
+  float COEFFICIENT_INTEGRAL;
+  // float COEFFICIENT_DERIVATIVE;
+  float PID_MAX_OUTPUT;
+  float pid_previous_time;
+  float x_gyro_integral_error;
+  float y_gyro_integral_error;
+  float x_gyro_previous_value;
+  float y_gyro_previous_value;
+*/
+PID calc_pid(float x_target, float x_current, float y_target, float y_current) {
+  // Calculate the time since function was last called
+  float now = millis();
+  float dT = now - pid_previous_time;
+  pid_previous_time = now;
+
+//  Serial.print(dT);
+//  Serial.print(":");
+//  Serial.print(x_target);
+//  Serial.print(":");
+//  Serial.print(y_target);
+//  Serial.println();
+//
+//  Serial.print(dT);
+//  Serial.print(",");
+
+  // Calculate error between target and current values
+  float x_error = x_target - x_current;
+  float y_error = y_target - y_current;
+
+  // Calculate the integral term
+  x_gyro_integral_error += x_error * dT;
+  y_gyro_integral_error += y_error * dT;
+
+  // Set old variable to equal new ones
+  x_gyro_previous_value = x_current;
+  y_gyro_previous_value = y_current;
+
+  // Multiply each term by its constant, and add it all up
+  float x_result = (x_error * COEFFICIENT_PROPORTIONAL) ;//+ (x_gyro_integral_error * COEFFICIENT_INTEGRAL);
+  float y_result = (y_error * COEFFICIENT_PROPORTIONAL) ;//+ (y_gyro_integral_error * COEFFICIENT_INTEGRAL);
+//  Serial.print(x_error);
+//    Serial.print(",");
+//    Serial.print(y_error);
+//  //  Serial.print(x_gyro_integral_error);
+//  Serial.println();
+
+  // Limit PID value to maximum values
+  if (x_result > GYRO_GOAL_MAX) x_result = GYRO_GOAL_MAX;
+  else if (x_result < GYRO_GOAL_MIN) x_result = GYRO_GOAL_MIN;
+
+  if (y_result > GYRO_GOAL_MAX) y_result = GYRO_GOAL_MAX;
+  else if (y_result < GYRO_GOAL_MIN) y_result = -PID_MAX_OUTPUT;
+
+  PID pid_result = {x_result, y_result};
+
+  return pid_result;
 }
