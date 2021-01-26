@@ -1,4 +1,4 @@
-//#include <PID_v1.h>
+#include <PID_v1.h> 
 #include <RF24.h>
 #include <Servo.h>
 #include "I2Cdev.h"
@@ -69,6 +69,11 @@ enum Channels {THROTTLE, AILERON, ELEVATOR, RUDDER};
 // Elevator=Pitch->Front vs. Back
 // Rudder=Yaw->CW vs. CCW
 
+const int ANALOG_OFFSET_THROTTLE = 0;
+const int ANALOG_OFFSET_AILERON = 0;
+const int ANALOG_OFFSET_ELEVATOR = 0;
+const int ANALOG_OFFSET_RUDDER = 0;
+
 enum Motor { FRONT_LEFT, FRONT_RIGHT, BACK_LEFT, BACK_RIGHT};
 const int motor_ports[] = {5, 6, 9, 10};
 Servo motors [4];
@@ -82,20 +87,14 @@ const float CUBERT_ESC_RANGE = cbrt(ESC_RANGE);
 
 // PID FEATURES
 
-struct PID {
-  float x_result;
-  float y_result;
-};
-
-float COEFFICIENT_PROPORTIONAL = 0.05;
-float COEFFICIENT_INTEGRAL = 0.25;
-// float COEFFICIENT_DERIVATIVE = 0.25;
-float PID_MAX_OUTPUT = ESC_RANGE;
-float pid_previous_time;
-float x_gyro_integral_error;
-float y_gyro_integral_error;
-float x_gyro_previous_value;
-float y_gyro_previous_value;
+//setpoint: where you want it to be
+//input: where it is now
+//output: where you should go to right now
+double xSetpoint, xInput, xOutput;
+double ySetpoint, yInput, yOutput;
+double Kp = 2, Ki = 2, Kd = 1;
+PID xPID(&xInput, &xOutput, &xSetpoint, Kp, Ki, Kd, DIRECT);
+PID yPID(&yInput, &yOutput, &ySetpoint, Kp, Ki, Kd, DIRECT);
 
 // END OF PID FEATURES
 
@@ -115,7 +114,7 @@ const float CUBERT_SCALE_FACTOR = 1 / (INTER_CUBERT * 1023);
 const int size_example[] = {1, 1, 1, 1};
 const size_t vals_size = sizeof(size_example);
 
-int values[4];
+unsigned int values[4];
 float distrs[4]; // Distributions of throttle
 
 RF24 radio(7, 8); // CE, CSN
@@ -157,7 +156,7 @@ void setup() {
   radio.openReadingPipe(0, address);
   radio.setPALevel(RF24_PA_MIN);
   radio.startListening();
-  Serial.println("</setup>");
+  Serial.println("Radio listening");
 
   for (int i = 0; i < 10; i++)
     if (radio.available()) {
@@ -169,16 +168,24 @@ void setup() {
     }
     else i -= 1;
 
-  if (verbose_setup) {
-    Serial.print("Initial Throttle: ");
-    Serial.println(values[THROTTLE]);
-  }
+  Serial.print("Initial Throttle: ");
+  Serial.println(values[THROTTLE]);
 
   if (config_esc) {
     configure_escs(verbose_setup);
+    Serial.println("Completed ESC configuration");
   } else {
     Serial.println("Skipping ESC configuration");
   }
+
+  
+  xPID.SetMode(AUTOMATIC);
+  xPID.SetOutputLimits(GYRO_GOAL_MIN, GYRO_GOAL_MAX);
+  yPID.SetMode(AUTOMATIC);
+  yPID.SetOutputLimits(GYRO_GOAL_MIN, GYRO_GOAL_MAX);
+  Serial.println("PID calculators activated");
+
+  Serial.println("</setup>");
 }
 
 void loop() {
@@ -224,27 +231,28 @@ void loop() {
       distrs[i] = throttle;
     }
 
-    int controller_aileron  = map(values[AILERON], 0, 1023, GYRO_GOAL_MIN, GYRO_GOAL_MAX);
-    int controller_elevator = map(values[ELEVATOR], 0, 1023, GYRO_GOAL_MIN, GYRO_GOAL_MAX);
+    xSetpoint  = map(values[AILERON] - ANALOG_OFFSET_AILERON, 0, 1023, GYRO_GOAL_MIN, GYRO_GOAL_MAX);
+    ySetpoint = map(values[ELEVATOR] - ANALOG_OFFSET_ELEVATOR, 0, 1023, GYRO_GOAL_MIN, GYRO_GOAL_MAX);
     int controller_rudder = map(values[RUDDER], 0, 1023, 0, ESC_RANGE);
 
-    Serial.print(values[AILERON]);
-    Serial.print(",");
-    Serial.print(values[ELEVATOR]);
-    Serial.println();
+    xInput = gx;
+    yInput = gy;
 
-    //calc_pid(float x_target, float x_current, float y_target, float y_current)
-    PID new_pid = calc_pid(controller_aileron, gx, controller_elevator, gy);
+    xPID.Compute();
+    yPID.Compute();
 
-    //    Serial.print(new_pid.x_result);
-    //    Serial.print(",");
-    //    Serial.println(new_pid.y_result);
+    Serial.println(
+      " => " + (String)(values[AILERON] - ANALOG_OFFSET_AILERON) + "," + (String)(values[ELEVATOR] - ANALOG_OFFSET_ELEVATOR) +
+      " => " + (String)xSetpoint + "," + (String)ySetpoint +
+      " =@ " + (String)xInput + "," + (String)yInput +
+      " => " + (String)xOutput + "," + (String)yOutput
+    );
 
-    float new_aileron = map(new_pid.x_result, GYRO_MOTOR_MIN, GYRO_MOTOR_MAX, 0, ESC_RANGE);
+    float new_aileron = map(xOutput, GYRO_MOTOR_MIN, GYRO_MOTOR_MAX, 0, ESC_RANGE);
     float cubert_aileron = cbrt(new_aileron);
     float cubert_inv_aileron = cbrt(ESC_RANGE - new_aileron);
 
-    float new_elevator = map(new_pid.y_result, GYRO_MOTOR_MIN, GYRO_MOTOR_MAX, 0, ESC_RANGE);
+    float new_elevator = map(yOutput, GYRO_MOTOR_MIN, GYRO_MOTOR_MAX, 0, ESC_RANGE);
     float cubert_elevator = cbrt(new_elevator);
     float cubert_inv_elevator = cbrt(ESC_RANGE - new_aileron);
 
@@ -277,7 +285,7 @@ void loop() {
       //      //      //      Serial.print(distrs[i]);
       //      Serial.print(",");
     }
-    Serial.println();
+    //    Serial.println();
   } else {
     Serial.println("R--");
   }
@@ -353,65 +361,4 @@ void configure_escs(bool verbose = false) {
 
   if (verbose)
     Serial.println("Ending ESC configuration");
-}
-
-
-/*
-  float COEFFICIENT_PROPORTIONAL;
-  float COEFFICIENT_INTEGRAL;
-  // float COEFFICIENT_DERIVATIVE;
-  float PID_MAX_OUTPUT;
-  float pid_previous_time;
-  float x_gyro_integral_error;
-  float y_gyro_integral_error;
-  float x_gyro_previous_value;
-  float y_gyro_previous_value;
-*/
-PID calc_pid(float x_target, float x_current, float y_target, float y_current) {
-  // Calculate the time since function was last called
-  float now = millis();
-  float dT = now - pid_previous_time;
-  pid_previous_time = now;
-
-//  Serial.print(dT);
-//  Serial.print(":");
-//  Serial.print(x_target);
-//  Serial.print(":");
-//  Serial.print(y_target);
-//  Serial.println();
-//
-//  Serial.print(dT);
-//  Serial.print(",");
-
-  // Calculate error between target and current values
-  float x_error = x_target - x_current;
-  float y_error = y_target - y_current;
-
-  // Calculate the integral term
-  x_gyro_integral_error += x_error * dT;
-  y_gyro_integral_error += y_error * dT;
-
-  // Set old variable to equal new ones
-  x_gyro_previous_value = x_current;
-  y_gyro_previous_value = y_current;
-
-  // Multiply each term by its constant, and add it all up
-  float x_result = (x_error * COEFFICIENT_PROPORTIONAL) ;//+ (x_gyro_integral_error * COEFFICIENT_INTEGRAL);
-  float y_result = (y_error * COEFFICIENT_PROPORTIONAL) ;//+ (y_gyro_integral_error * COEFFICIENT_INTEGRAL);
-//  Serial.print(x_error);
-//    Serial.print(",");
-//    Serial.print(y_error);
-//  //  Serial.print(x_gyro_integral_error);
-//  Serial.println();
-
-  // Limit PID value to maximum values
-  if (x_result > GYRO_GOAL_MAX) x_result = GYRO_GOAL_MAX;
-  else if (x_result < GYRO_GOAL_MIN) x_result = GYRO_GOAL_MIN;
-
-  if (y_result > GYRO_GOAL_MAX) y_result = GYRO_GOAL_MAX;
-  else if (y_result < GYRO_GOAL_MIN) y_result = -PID_MAX_OUTPUT;
-
-  PID pid_result = {x_result, y_result};
-
-  return pid_result;
 }
